@@ -11,8 +11,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sandglass_paths import __version__
 
 
-def _rpc_response(id, result):
-    return json.dumps({"jsonrpc": "2.0", "id": id, "result": result})
+def _rpc_response(id, result, wrap=True):
+    """wrap=True for tools/call (MCP content blocks). wrap=False for initialize, tools/list (bare JSON)."""
+    if not wrap:
+        return json.dumps({"jsonrpc": "2.0", "id": id, "result": result})
+    return json.dumps({"jsonrpc": "2.0", "id": id, "result": {
+        "content": [{"type": "text", "text": json.dumps(result, ensure_ascii=False) if not isinstance(result, str) else result}]
+    }})
 
 
 def _rpc_error(id, code, message):
@@ -147,27 +152,27 @@ def main():
 
             if method == "tools/list":
                 tools = [
-                    {"name": "sandglass_ping", "description": "健康检查——返回沙漏总数和当前阶段"},
-                    {"name": "sandglass_search", "description": "关键词搜索记忆"},
-                    {"name": "sandglass_semantic", "description": "语义搜索记忆(同义词+SimHash+TF-IDF)"},
-                    {"name": "sandglass_recent", "description": "最近N条记忆"},
-                    {"name": "sandglass_offset", "description": "当前偏移率(省钱/愿投/放弃)"},
-                    {"name": "sandglass_persona", "description": "当前阶段画像"},
-                    {"name": "sandglass_tasks", "description": "待办事项列表"},
-                    {"name": "sandglass_echo", "description": "当前回音折风向"},
-                    {"name": "sandglass_dream", "description": "幽灵决策——'如果选另一个选项会怎样'"},
-                    {"name": "sandglass_chart", "description": "情绪熵 ASCII 可视化图表"},
-                    {"name": "sandglass_migrate", "description": "一键导出全部记忆数据为 tar.gz"},
-                    {"name": "sandglass_soul_export", "description": "导出灵魂差分(偏移率+决策+回音折)"},
-                    {"name": "sandglass_soul_merge", "description": "合并外部灵魂差分"},
-                    {"name": "sandglass_import", "description": "导入外部沙漏或ChatGPT/Claude对话导出"},
-                    {"name": "sandglass_export", "description": "导出沙漏为可迁移文件"},
-                    {"name": "sandglass_thread", "description": "查询织线知识图谱——实体关系三元组"},
-                    {"name": "sandglass_thread_graph", "description": "织线实体子图——展开N跳关系"},
-                    {"name": "sandglass_thread_weave", "description": "织线→织布机桥接——因果链摘要"},
-                    {"name": "sandglass_thread_add", "description": "手动补入三元组——Agent发现漏抓时调用"},
+                    {"name": "sandglass_ping", "description": "健康检查——返回沙漏总数和当前阶段", "inputSchema": {"type": "object", "properties": {}}},
+                    {"name": "sandglass_search", "description": "关键词搜索记忆", "inputSchema": {"type": "object", "properties": {"query": {"type": "string", "description": "搜索关键词"}, "limit": {"type": "integer", "description": "最大返回条数"}}, "required": ["query"]}},
+                    {"name": "sandglass_semantic", "description": "语义搜索记忆(同义词+SimHash+TF-IDF)", "inputSchema": {"type": "object", "properties": {"query": {"type": "string", "description": "语义搜索查询"}, "limit": {"type": "integer", "description": "最大返回条数"}}, "required": ["query"]}},
+                    {"name": "sandglass_recent", "description": "最近N条记忆", "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer", "description": "返回条数，默认10"}}}},
+                    {"name": "sandglass_offset", "description": "当前偏移率(省钱/愿投/放弃)", "inputSchema": {"type": "object", "properties": {}}},
+                    {"name": "sandglass_persona", "description": "当前阶段画像", "inputSchema": {"type": "object", "properties": {}}},
+                    {"name": "sandglass_tasks", "description": "待办事项列表", "inputSchema": {"type": "object", "properties": {}}},
+                    {"name": "sandglass_echo", "description": "当前回音折风向", "inputSchema": {"type": "object", "properties": {}}},
+                    {"name": "sandglass_dream", "description": "幽灵决策——'如果选另一个选项会怎样'", "inputSchema": {"type": "object", "properties": {"question": {"type": "string", "description": "替代选项的问题"}}, "required": ["question"]}},
+                    {"name": "sandglass_chart", "description": "情绪熵 ASCII 可视化图表", "inputSchema": {"type": "object", "properties": {"n": {"type": "integer", "description": "显示最近N条，默认10"}}}},
+                    {"name": "sandglass_migrate", "description": "一键导出全部记忆数据为 tar.gz", "inputSchema": {"type": "object", "properties": {"output": {"type": "string", "description": "输出路径"}}}},
+                    {"name": "sandglass_soul_export", "description": "导出灵魂差分(偏移率+决策+回音折)", "inputSchema": {"type": "object", "properties": {"output": {"type": "string", "description": "输出路径"}}}},
+                    {"name": "sandglass_soul_merge", "description": "合并外部灵魂差分", "inputSchema": {"type": "object", "properties": {"source": {"type": "string", "description": "源文件路径"}}, "required": ["source"]}},
+                    {"name": "sandglass_import", "description": "导入外部沙漏或ChatGPT/Claude对话导出", "inputSchema": {"type": "object", "properties": {"source_path": {"type": "string", "description": "源文件路径"}, "format": {"type": "string", "description": "格式：sandglass/chatgpt/claude"}}, "required": ["source_path"]}},
+                    {"name": "sandglass_export", "description": "导出沙漏为可迁移文件", "inputSchema": {"type": "object", "properties": {"output_path": {"type": "string", "description": "输出路径"}, "limit": {"type": "integer", "description": "最大导出条数"}, "month": {"type": "string", "description": "指定月份(YYYY-MM)"}}}},
+                    {"name": "sandglass_thread", "description": "查询织线知识图谱——实体关系三元组", "inputSchema": {"type": "object", "properties": {"entity": {"type": "string", "description": "查询的实体名"}, "relation": {"type": "string", "description": "关系类型"}, "limit": {"type": "integer", "description": "最大返回数"}}}},
+                    {"name": "sandglass_thread_graph", "description": "织线实体子图——展开N跳关系", "inputSchema": {"type": "object", "properties": {"entity": {"type": "string", "description": "中心实体名"}, "depth": {"type": "integer", "description": "展开跳数，默认1"}}, "required": ["entity"]}},
+                    {"name": "sandglass_thread_weave", "description": "织线→织布机桥接——因果链摘要", "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer", "description": "最大摘要数，默认3"}}}},
+                    {"name": "sandglass_thread_add", "description": "手动补入三元组——Agent发现漏抓时调用", "inputSchema": {"type": "object", "properties": {"subject": {"type": "string", "description": "主体"}, "relation": {"type": "string", "description": "关系"}, "object": {"type": "string", "description": "客体"}}, "required": ["subject", "relation", "object"]}},
                 ]
-                print(_rpc_response(tid, {"tools": tools}), flush=True)
+                print(_rpc_response(tid, {"tools": tools}, wrap=False), flush=True)
 
             elif method == "tools/call":
                 name = req.get("params", {}).get("name", "")
@@ -179,7 +184,7 @@ def main():
                     "protocolVersion": "2024-11-05",
                     "capabilities": {"tools": {}},
                     "serverInfo": {"name": "NexSandglass", "version": __version__}
-                }), flush=True)
+                }, wrap=False), flush=True)
 
             else:
                 print(_rpc_error(tid, -32601, f"Unknown method: {method}"), flush=True)

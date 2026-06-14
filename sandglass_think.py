@@ -176,9 +176,11 @@ def full_sanity() -> dict:
         # 只测不会产生副作用的读接口
         checks = {}
         try:
+            from sandglass_think import _emotional_entropy
             checks["情绪熵"] = "✅" if _emotional_entropy() >= 0 else "?"
         except: checks["情绪熵"] = "❌"
         try:
+            from sandglass_think import comprehensive_offset
             o = comprehensive_offset()
             checks["偏移率"] = f"✅ {o['offset']:+d}% ({o['sample']}条)"
         except: checks["偏移率"] = "❌"
@@ -188,10 +190,12 @@ def full_sanity() -> dict:
             checks["织布机"] = f"✅ {len(w.get('conflicts',[]))}处矛盾"
         except: checks["织布机"] = "❌"
         try:
+            from sandglass_think import stage_list
             s = stage_list()
             checks["阶段"] = f"✅ {len(s)}阶段"
         except: checks["阶段"] = "❌"
         try:
+            from sandglass_think import search_filter
             sf = search_filter("test")
             checks["搜索"] = "✅" if sf.get("keywords") else "⚠️"
         except: checks["搜索"] = "❌"
@@ -201,19 +205,23 @@ def full_sanity() -> dict:
             checks["决策粒子"] = "✅" if isinstance(c, list) else "⚠️"
         except: checks["决策粒子"] = "❌"
         try:
+            from sandglass_think import scene_stage_matrix
             ssm = scene_stage_matrix()
-            checks["场景矩阵"] = f'✅ {len(ssm.get("stages",[]))}阶段×{len(ssm.get("scenes",[]))}场景'
+            checks["场景矩阵"] = f"✅ {len(ssm.get('stages',[]))}阶段×{len(ssm.get('scenes',[]))}场景"
         except: checks["场景矩阵"] = "❌"
         try:
+            from sandglass_think import scene_stage_cross_validate
             sv = scene_stage_cross_validate()
             n_refined = sum(1 for f in sv.get("findings", []) if f.get("refined"))
             checks["场景-阶段交叉验证"] = f"✅ {n_refined}处需细化" if n_refined else "✅ 一致"
         except: checks["场景-阶段交叉验证"] = "❌"
         try:
+            from sandglass_think import entropy_mirror
             em = entropy_mirror("最近决策")
             checks["熵镜"] = "✅" if em.get("found_mirror") or "无匹配" in str(em) else "✅"
         except: checks["熵镜"] = "❌"
         try:
+            from sandglass_think import entropy_ghost
             eg = entropy_ghost("如果选另一个选项呢")
             checks["幽灵决策"] = "✅" if isinstance(eg, dict) else "⚠️"
         except: checks["幽灵决策"] = "❌"
@@ -1027,6 +1035,7 @@ def stage_brief() -> str:
 
     # 情绪熵可视化
     try:
+        from sandglass_think import entropy_chart
         lines.append(f"\n{entropy_chart()}")
     except Exception:
         pass

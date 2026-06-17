@@ -42,7 +42,9 @@ def _handle_tool(name, args, request_id):
 
         elif name == "sandglass_semantic":
             from sandglass_think import search_semantic
-            r = search_semantic(args.get("query", ""), limit=args.get("limit", 5))
+            backend = args.get("backend", "tfidf")
+            r = search_semantic(args.get("query", ""), limit=args.get("limit", 5),
+                                backend=backend)
             return _rpc_response(request_id, [
                 {"line": ln, "ts": ts, "text": txt[:200]} for ln, ts, txt, *_ in r
             ])
@@ -109,7 +111,8 @@ def _handle_tool(name, args, request_id):
 
         elif name == "sandglass_thread":
             from weavethread import wthread_query
-            r = wthread_query(args.get("entity"), args.get("relation"), args.get("limit", 20))
+            r = wthread_query(args.get("entity"), args.get("relation"),
+                              args.get("limit", 20), as_of=args.get("as_of"))
             return _rpc_response(request_id, r)
 
         elif name == "sandglass_thread_graph":
@@ -124,7 +127,10 @@ def _handle_tool(name, args, request_id):
 
         elif name == "sandglass_thread_add":
             from weavethread import wthread_add
-            ok = wthread_add(args.get("subject", "user"), args.get("relation", ""), args.get("object", ""))
+            ok = wthread_add(args.get("subject", "user"), args.get("relation", ""),
+                             args.get("object", ""),
+                             valid_from=args.get("valid_from"),
+                             valid_until=args.get("valid_until"))
             return _rpc_response(request_id, {"added": ok})
 
         else:
@@ -154,7 +160,7 @@ def main():
                 tools = [
                     {"name": "sandglass_ping", "description": "健康检查——返回沙漏总数和当前阶段", "inputSchema": {"type": "object", "properties": {}}},
                     {"name": "sandglass_search", "description": "关键词搜索记忆", "inputSchema": {"type": "object", "properties": {"query": {"type": "string", "description": "搜索关键词"}, "limit": {"type": "integer", "description": "最大返回条数"}}, "required": ["query"]}},
-                    {"name": "sandglass_semantic", "description": "语义搜索记忆(同义词+SimHash+TF-IDF)", "inputSchema": {"type": "object", "properties": {"query": {"type": "string", "description": "语义搜索查询"}, "limit": {"type": "integer", "description": "最大返回条数"}}, "required": ["query"]}},
+                    {"name": "sandglass_semantic", "description": "语义搜索记忆（同义词+SimHash+TF-IDF/ChromaDB）", "inputSchema": {"type": "object", "properties": {"query": {"type": "string", "description": "语义搜索查询"}, "limit": {"type": "integer", "description": "最大返回条数"}, "backend": {"type": "string", "description": "搜索后端：tfidf（默认）/ chromadb"}}, "required": ["query"]}},
                     {"name": "sandglass_recent", "description": "最近N条记忆", "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer", "description": "返回条数，默认10"}}}},
                     {"name": "sandglass_offset", "description": "当前偏移率(省钱/愿投/放弃)", "inputSchema": {"type": "object", "properties": {}}},
                     {"name": "sandglass_persona", "description": "当前阶段画像", "inputSchema": {"type": "object", "properties": {}}},
@@ -167,10 +173,10 @@ def main():
                     {"name": "sandglass_soul_merge", "description": "合并外部灵魂差分", "inputSchema": {"type": "object", "properties": {"source": {"type": "string", "description": "源文件路径"}}, "required": ["source"]}},
                     {"name": "sandglass_import", "description": "导入外部沙漏或ChatGPT/Claude对话导出", "inputSchema": {"type": "object", "properties": {"source_path": {"type": "string", "description": "源文件路径"}, "format": {"type": "string", "description": "格式：sandglass/chatgpt/claude"}}, "required": ["source_path"]}},
                     {"name": "sandglass_export", "description": "导出沙漏为可迁移文件", "inputSchema": {"type": "object", "properties": {"output_path": {"type": "string", "description": "输出路径"}, "limit": {"type": "integer", "description": "最大导出条数"}, "month": {"type": "string", "description": "指定月份(YYYY-MM)"}}}},
-                    {"name": "sandglass_thread", "description": "查询织线知识图谱——实体关系三元组", "inputSchema": {"type": "object", "properties": {"entity": {"type": "string", "description": "查询的实体名"}, "relation": {"type": "string", "description": "关系类型"}, "limit": {"type": "integer", "description": "最大返回数"}}}},
+                    {"name": "sandglass_thread", "description": "查询织线知识图谱——实体关系三元组（支持 as_of 时间点查询）", "inputSchema": {"type": "object", "properties": {"entity": {"type": "string", "description": "查询的实体名"}, "relation": {"type": "string", "description": "关系类型"}, "limit": {"type": "integer", "description": "最大返回数"}, "as_of": {"type": "string", "description": "时间点（ISO格式），只返回在该时间点有效的三元组"}}}},
                     {"name": "sandglass_thread_graph", "description": "织线实体子图——展开N跳关系", "inputSchema": {"type": "object", "properties": {"entity": {"type": "string", "description": "中心实体名"}, "depth": {"type": "integer", "description": "展开跳数，默认1"}}, "required": ["entity"]}},
                     {"name": "sandglass_thread_weave", "description": "织线→织布机桥接——因果链摘要", "inputSchema": {"type": "object", "properties": {"limit": {"type": "integer", "description": "最大摘要数，默认3"}}}},
-                    {"name": "sandglass_thread_add", "description": "手动补入三元组——Agent发现漏抓时调用", "inputSchema": {"type": "object", "properties": {"subject": {"type": "string", "description": "主体"}, "relation": {"type": "string", "description": "关系"}, "object": {"type": "string", "description": "客体"}}, "required": ["subject", "relation", "object"]}},
+                    {"name": "sandglass_thread_add", "description": "手动补入三元组——Agent发现漏抓时调用（支持 valid_from/valid_until 时间窗口）", "inputSchema": {"type": "object", "properties": {"subject": {"type": "string", "description": "主体"}, "relation": {"type": "string", "description": "关系"}, "object": {"type": "string", "description": "客体"}, "valid_from": {"type": "string", "description": "生效时间（ISO格式，如 2026-06-01T00:00:00Z）"}, "valid_until": {"type": "string", "description": "失效时间（ISO格式）"}}, "required": ["subject", "relation", "object"]}},
                 ]
                 print(_rpc_response(tid, {"tools": tools}, wrap=False), flush=True)
 

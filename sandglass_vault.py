@@ -342,7 +342,7 @@ def _mmap_search(query: str, limit: int, month: str, stage_filter: bool = False)
                     line = mm[line_start:line_end].decode("utf-8", errors="replace")
                     ts, sender, text = _parse_line(line)
                     if ts and query.lower() in text.lower():
-                        if not scan_months or any(ts.startswith(m) for m in scan_months):
+                        if not month or ts.startswith(month):
                             results.append((line_num, ts, text))
                             if limit > 0 and len(results) >= limit: break
                     line_start = line_end + 1
@@ -413,10 +413,9 @@ def sandglass_import(source_path: str, source_format: str = "sandglass") -> dict
         try:
             from sandglass_sqlite import sync_incremental
             sync_incremental()
-        except Exception:
-            pass
-
-        # 合并
+        except: pass
+        
+        return {"imported": imported, "skipped": skipped, "total": imported + skipped}
     except Exception as e:
         logger.error(f"导入失败: {e}")
         return {"error": str(e), "imported": imported, "skipped": skipped}
@@ -429,6 +428,7 @@ def sandglass_export(output_path: str = None, limit: int = None, month: str = ""
     返回导出文件路径。
     """
     if output_path is None:
+        from sandglass_paths import _NB
         output_path = os.path.join(_NB, "sandglass_export.txt")
     
     lines = []

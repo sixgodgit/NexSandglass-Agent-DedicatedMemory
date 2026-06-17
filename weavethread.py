@@ -29,7 +29,7 @@ _EXTRACT_PATTERNS = [
 
 
 def _ensure_table():
-    """确保 wthread_triples 表存在"""
+    """确保 wthread_triples 表存在（含时间有效性窗口）"""
     conn = sqlite3.connect(_DB, timeout=10)
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("""
@@ -40,12 +40,26 @@ def _ensure_table():
             object TEXT NOT NULL,
             source_line INTEGER,
             confidence REAL DEFAULT 0.5,
-            created_at TEXT DEFAULT (datetime('now'))
+            created_at TEXT DEFAULT (datetime('now')),
+            valid_from TEXT,
+            valid_until TEXT
         )
     """)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_wthread_subject ON wthread_triples(subject)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_wthread_relation ON wthread_triples(relation)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_wthread_object ON wthread_triples(object)")
+    # 检查旧表是否有 valid_from / valid_until 列，无则 ALTER ADD
+    cols = [c[1] for c in conn.execute("PRAGMA table_info(wthread_triples)").fetchall()]
+    if "valid_from" not in cols:
+        try:
+            conn.execute("ALTER TABLE wthread_triples ADD COLUMN valid_from TEXT")
+        except sqlite3.OperationalError:
+            pass  # 其他连接可能在操作
+    if "valid_until" not in cols:
+        try:
+            conn.execute("ALTER TABLE wthread_triples ADD COLUMN valid_until TEXT")
+        except sqlite3.OperationalError:
+            pass
     conn.commit()
     conn.close()
 
@@ -109,35 +123,43 @@ def wthread_store(text: str, line_num: int = 0, subject: str = "user") -> int:
     return count
 
 
-def wthread_query(entity: str = None, relation: str = None, limit: int = 20) -> list:
+def wthread_query(entity: str = None, relation: str = None, limit: int = 20,
+                   as_of: str = None) -> list:
     """查询织线——织布机的线材。可按实体或关系过滤。
-    返回 [{subject, relation, object, source_line, confidence}, ...]
+    支持 as_of 时间点查询（过滤 valid_from/valid_until 窗口）。
+    返回 [{subject, relation, object, source_line, confidence, valid_from, valid_until}, ...]
     """
     _ensure_table()
     conn = sqlite3.connect(_DB, timeout=10)
     conn.row_factory = sqlite3.Row
-    
+
+    base_where = ""
+    params = []
+
     if entity and relation:
-        rows = conn.execute(
-            "SELECT * FROM wthread_triples WHERE (subject=? OR object=?) AND relation=? ORDER BY id DESC LIMIT ?",
-            (entity, entity, relation, limit)
-        ).fetchall()
+        base_where = "WHERE (subject=? OR object=?) AND relation=?"
+        params = [entity, entity, relation]
     elif entity:
-        rows = conn.execute(
-            "SELECT * FROM wthread_triples WHERE subject=? OR object=? ORDER BY id DESC LIMIT ?",
-            (entity, entity, limit)
-        ).fetchall()
+        base_where = "WHERE (subject=? OR object=?)"
+        params = [entity, entity]
     elif relation:
-        rows = conn.execute(
-            "SELECT * FROM wthread_triples WHERE relation=? ORDER BY id DESC LIMIT ?",
-            (relation, limit)
-        ).fetchall()
+        base_where = "WHERE relation=?"
+        params = [relation]
     else:
-        rows = conn.execute(
-            "SELECT * FROM wthread_triples ORDER BY id DESC LIMIT ?",
-            (limit,)
-        ).fetchall()
-    
+        base_where = ""
+
+    # as_of 过滤：valid_from <= as_of AND (valid_until IS NULL OR valid_until > as_of)
+    if as_of:
+        if base_where:
+            base_where += " AND (valid_from IS NULL OR valid_from <= ?) AND (valid_until IS NULL OR valid_until > ?)"
+        else:
+            base_where = "WHERE (valid_from IS NULL OR valid_from <= ?) AND (valid_until IS NULL OR valid_until > ?)"
+        params.extend([as_of, as_of])
+
+    rows = conn.execute(
+        f"SELECT * FROM wthread_triples {base_where} ORDER BY id DESC LIMIT ?",
+        params + [limit]
+    ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
@@ -231,8 +253,10 @@ def wthread_weave(limit: int = 3) -> str:
     for rel, targets in result["grouped"].items():
         lines.append(f"  {rel}: " + ", ".join(targets[:limit]))
     return "\n".join(lines)
-def wthread_add(subject: str, relation: str, object: str, source_line: int = 0) -> bool:
+def wthread_add(subject: str, relation: str, object: str, source_line: int = 0,
+                 valid_from: str = None, valid_until: str = None) -> bool:
     """LLM 手动补漏——Agent 发现正则漏抓的关系时，通过 MCP 工具补入。
+    支持 valid_from / valid_until 时间有效性窗口。
     返回 True 表示写入成功或已存在。
     """
     _ensure_table()
@@ -246,8 +270,8 @@ def wthread_add(subject: str, relation: str, object: str, source_line: int = 0) 
         return True
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     conn.execute(
-        "INSERT INTO wthread_triples (subject, relation, object, source_line, created_at) VALUES (?,?,?,?,?)",
-        (subject, relation, object, source_line, now)
+        "INSERT INTO wthread_triples (subject, relation, object, source_line, created_at, valid_from, valid_until) VALUES (?,?,?,?,?,?,?)",
+        (subject, relation, object, source_line, now, valid_from, valid_until)
     )
     conn.commit()
     conn.close()

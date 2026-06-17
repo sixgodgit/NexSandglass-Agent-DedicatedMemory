@@ -118,8 +118,7 @@ class IdxSearch:
                     from sandglass_vault import rebuild_index
                     rebuild_index()
                     idx = _sync_index()
-                except Exception:
-                    return []
+                except: return []
             if not idx: return []
             tokens = _query_tokens(query)
             candidates = {}

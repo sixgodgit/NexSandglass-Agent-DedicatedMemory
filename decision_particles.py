@@ -8,11 +8,9 @@ NexSandglass 决策粒子 — 第三层通用燃料 V2
 ==========================================
 """
 
-import os, json, time, logging
+import os, json
 from datetime import datetime
 from sandglass_paths import _NB
-
-logger = logging.getLogger(__name__)
 
 _PARTICLES = os.path.join(_NB, "decision_particles.txt")
 _VOCAB = os.path.join(_NB, "decision_vocab.txt")
@@ -353,16 +351,7 @@ def _enrich_choice_with_llm(question: str, choice: str) -> str:
 
 def _tag(question: str, choice: str) -> str:
     local = _tag_local(choice)
-    t0 = time.time()
     llm_tags = _tag_llm(question, choice)
-    # V2.9.9 metrics 埋点
-    try:
-        from metrics import emit_metric
-        emit_metric('tag_result', local_hit=bool(local), llm_used=bool(llm_tags))
-        if llm_tags:
-            emit_metric('tag_llm_call', latency_ms=int((time.time()-t0)*1000))
-    except Exception:
-        pass
 
     if llm_tags:
         _learn(llm_tags, choice)
@@ -534,24 +523,20 @@ def log(question: str, choice: str, ts: str = "", chain: list = None) -> None:
     emotion_tag = "neutral"
     try:
         from emotion_vocab import detect as emotion_detect
-        det = emotion_detect(question + ' ' + choice)
-        if det.get('mood'):
-            emotion_tag = det['mood']
-    except ImportError:
-        pass  # emotion_vocab 模块未安装
-    except Exception:
-        logger.debug('情绪检测失败', exc_info=True)
+        det = emotion_detect(question + " " + choice)
+        if det.get("mood"): emotion_tag = det["mood"]
+    except: pass
+    record = f"{options} | {resolved} | {direction} | {emotion_tag} | {tags}"
 
     os.makedirs(os.path.dirname(_PARTICLES), exist_ok=True)
     with open(_PARTICLES, "a", encoding="utf-8") as f:
-        record = f"{options} | {resolved} | {direction} | {emotion_tag} | {tags}"
         f.write(f"{ts} | {record}\n")
 
     # 影子沙同步
     try:
         from shadow_sand import shadow_index
         shadow_index(choice, "decision", tags)
-    except Exception: pass
+    except: pass
 
     feed_all(resolved, tags, direction)
 
@@ -561,7 +546,7 @@ def log(question: str, choice: str, ts: str = "", chain: list = None) -> None:
         off = comprehensive_offset()
         if off.get("direction") and off["direction"] != "neutral":
             persona_project(off["direction"], off.get("offset", 0))
-    except Exception: pass
+    except: pass
 
     # 回音折回读——落粒子时读取情感残留
     try:
@@ -578,8 +563,8 @@ def log(question: str, choice: str, ts: str = "", chain: list = None) -> None:
                             with open(_PARTICLES, "a", encoding="utf-8") as af:
                                 af.write(f"{ts} | echo_wind | {rec['sentiment']}({rec.get('spread_weight',1.0)}) | echo | 回音折残留\n")
                             break
-                    except (json.JSONDecodeError, KeyError, ValueError): pass
-    except Exception: pass
+                    except: pass
+    except: pass
 
 
 def _has_llm() -> bool:

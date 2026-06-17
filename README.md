@@ -1,5 +1,3 @@
-> 🔱 Maintained by [sixgodgit](https://github.com/sixgodgit) · Original by [lovevin1314-tech](https://github.com/lovevin1314-tech)
-
 # NexSandglass ⏳ — Local-First AI Agent Memory
 
 > **中文介绍在下方 · 中文介绍在下方 · 中文介绍在下方**

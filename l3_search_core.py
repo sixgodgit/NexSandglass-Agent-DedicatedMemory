@@ -11,9 +11,6 @@ import re
 import math
 import os
 import hashlib
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 # ═══════════════════════════════════════════════════════
@@ -46,7 +43,7 @@ def _tokenize_for_density(text: str) -> set:
                 prev_cjk = None
     if lang in ("en", "mixed"):
         # 英文整词 + 2-3gram
-        for w in re.findall(r'[a-zA-Z]+', text.lower()):
+        for w in __import__('re').findall(r'[a-zA-Z]+', text.lower()):
             if len(w) >= 2:
                 tokens.add(w)
                 for n in (2, 3):
@@ -310,10 +307,7 @@ def _synonym_expand(query: str) -> list:
                     if w.lower() not in seen:
                         keywords.append(w)
                         seen.add(w.lower())
-    except ImportError:
-        pass  # emotion_vocab 模块未安装
-    except Exception:
-        logger.debug("情绪词库扩展失败", exc_info=True)
+    except: pass
     return keywords
 
 
@@ -485,7 +479,7 @@ def _feed_emotion_to_synonyms():
                     w = e.get("word", "")
                     if w and len(w) >= 2:
                         emotion_words[w] = emotion_words.get(w, 0) + 1
-                except (json.JSONDecodeError, KeyError): pass
+                except: pass
         # 频次≥2的情绪词注入同义词
         top = [w for w, c in sorted(emotion_words.items(), key=lambda x: x[1], reverse=True)[:30] if c >= 2]
         for w in top:
@@ -510,4 +504,11 @@ def _feed_emotion_to_synonyms():
         pass
 
 
-# ======================== V2.8: sand density + dynamic expand ========================
+# ======================== V2.8: sand density + dynamic expand + lang detect ========================
+
+def _detect_lang(query: str) -> str:
+    has_cjk = any(chr(0x4e00) <= c <= chr(0x9fff) for c in query)
+    has_alpha = any(c.isascii() and c.isalpha() for c in query)
+    if has_cjk and has_alpha: return 'mixed'
+    elif has_cjk: return 'zh'
+    else: return 'en'

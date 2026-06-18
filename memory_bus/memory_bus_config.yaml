@@ -1,0 +1,89 @@
+# ─────────────────────────────────────────────
+# Hermes 记忆总线 (Memory Bus) 配置
+# ─────────────────────────────────────────────
+# 同步规则和阈值 — 不修改 config.yaml / 不触碰现有子系统
+
+version: 1.0
+
+# ── 通用 ──
+bus:
+  log_level: INFO                   # DEBUG / INFO / WARNING / ERROR
+  enable_all_sync: true             # 总开关
+  sync_interval_seconds: 30          # 轮询同步间隔（秒）
+
+# ── 织线→L1 同步 ──
+weave_to_l1:
+  enabled: true
+  # 三元组重要性阈值（0-1），低于此值的不提升到 L1
+  importance_threshold: 0.6
+  # 自动判断为"事实类"的关系类型列表
+  factual_relations:
+    - 使用
+    - 装了
+    - 安装了
+    - 依赖
+    - 偏好
+    - 替换为
+    - 迁移
+    - 安装
+  # 忽略的临时关系类型
+  ephemeral_relations:
+    - 对比
+    - 放弃
+    - 反感
+  # 如果三元组出现在N条以上对话中，自动提升重要度
+  repeat_threshold: 3
+  # L1 最大行数（超过则先移除旧事实）
+  l1_max_lines: 15
+  # L1 文件路径
+  l1_path: /root/.hermes/memory_layers/l1_facts.aaak
+
+# ── 梦境→memory 同步 ──
+dream_to_memory:
+  enabled: true
+  # 梦境结果文件（dream-system 输出）
+  dream_log_path: /root/.hermes/nexsandglass/sandglass.txt
+  # 检测到新模式后写入 memory 的最小置信度
+  min_confidence: 0.5
+  # 兴趣/模式关键词
+  interest_keywords:
+    - 喜欢
+    - 倾向
+    - 模式
+    - 兴趣
+    - 新发现
+    - 习惯
+    - 重复
+
+# ── 偏移率→memory 同步 ──
+offset_to_memory:
+  enabled: true
+  # 偏移率突变阈值（百分比）
+  spike_threshold: 30
+  # 偏移率连续稳定阈值（百分比）
+  stable_threshold: 10
+  # 检查间隔（秒）
+  check_interval: 300
+
+# ── L1 衰减标记 ──
+l1_decay:
+  enabled: true
+  # 超过此天数未引用的 L1 事实标记为衰减
+  max_unreferenced_days: 30
+  # 衰减标记前缀
+  decay_prefix: "[DECAY] "
+  # 完全清理的天数
+  cleanup_days: 60
+
+# ── 统一查询 ──
+query:
+  # 各层结果权重（去重后排序用）
+  weights:
+    l1_weight: 5.0         # L1 层事实权重最高
+    memory_weight: 3.0     # Hermes 内置 memory 工具
+    sandglass_weight: 2.0  # 沙漏语义搜索
+    session_weight: 1.0    # 会话全文搜索
+  # 聚合结果上限
+  max_results: 20
+  # 每层最大提取
+  max_per_layer: 15
